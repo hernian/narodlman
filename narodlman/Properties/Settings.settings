@@ -5,5 +5,8 @@
     <Setting Name="PathBookInfo" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="PathNaroZip2EPub" Type="System.String" Scope="User">
+      <Value Profile="(Default)">D:\MyPrograms\narozip2epub\narozip2epub\bin\Debug\net8.0-windows\narozip2epub.exe</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

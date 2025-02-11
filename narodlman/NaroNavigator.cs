@@ -9,12 +9,19 @@ using Microsoft.Web.WebView2.Core;
 using AngleSharp.Html.Parser;
 using AngleSharp.Html.Dom;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography.Xml;
 
 namespace narodlman
 {
     internal partial class NaroNavigator(WebView2 webView2, string urlTitlePage)
     {
         public class Error(string msg) : Exception(msg) { }
+
+        public class TitleAuthor(string title, string author)
+        {
+            public readonly string Title = title;
+            public readonly string Author = author;
+        }
 
         private readonly WebView2 _webView2 = webView2;
         private readonly string _utlTitlePage = urlTitlePage;
@@ -33,6 +40,7 @@ namespace narodlman
             var listEpisodeInfo = new List<EpisodeInfo>();
             try
             {
+                Debug.WriteLine("Getting the episode infos from server");
                 var sep = _utlTitlePage[^1] != '/' ? "/" : "";
                 var pageNum = (epNumStart + 99) / 100;
                 var url = $"{_utlTitlePage}{sep}?p={pageNum}";
@@ -48,7 +56,7 @@ namespace narodlman
                     {
                         var strHtml = System.Text.Json.JsonDocument.Parse(res).RootElement.GetString() ?? throw new Error($"JavaScrip Execution Error");
                         var doc = _htmlParser.ParseDocument(strHtml);
-                        var urlNext = ParseEpisodeList(doc, listEpisodeInfo);
+                        var urlNext = ParseEpisodeInfoList(doc, listEpisodeInfo);
                         return urlNext;
                     }, ct);
                     if (urlNextPage == string.Empty)
@@ -72,19 +80,12 @@ namespace narodlman
             return listEpisodeInfo.AsReadOnly();
         }
 
-        private static string ParseEpisodeList(IHtmlDocument doc, List<EpisodeInfo> listEpisodeInfo)
+        private static string ParseEpisodeInfoList(IHtmlDocument doc, List<EpisodeInfo> listEpisodeInfo)
         {
             var elemNextPage = doc.QuerySelector("a.c-pager__item--next");
             var urlNextPage = elemNextPage?.GetAttribute("href") ?? string.Empty;
 
-            var elemPagerRes = doc.QuerySelector("div.c-pager__result-stats") ?? throw new Error("No Pager Result");
-            var regexpFirstPage = RegexFirstPage();
-            var matchFirstPage = regexpFirstPage.Match(elemPagerRes.TextContent);
-            if (!matchFirstPage.Success)
-            {
-                throw new Error($"Invalid Pager Result");
-            }
-            var epNumFirst = int.Parse(matchFirstPage.Value);
+            var epNumFirst = GetFirstEpisodeNumber(doc);
 
             var regexEpDate = RegexEpDate();
             var epNum = epNumFirst;
@@ -103,8 +104,10 @@ namespace narodlman
                 {
                     throw new Error("Invalid Episode Date");
                 }
-                var epDate = DateTime.Parse(match.Value).ToUniversalTime();
-                Debug.WriteLine($"{epNum} {epTitle} {epDate}");
+                var dtTemp = DateTime.Parse(match.Value);
+                var dtUtc = DateTime.SpecifyKind(dtTemp, DateTimeKind.Local);
+                var epDate = new DateTimeOffset(dtUtc);
+                Debug.WriteLine($"#{epNum}, {epTitle}, {epDate.UtcDateTime:s}");
                 var epInfo = new EpisodeInfo()
                 {
                     EpisodeNumber = epNum,
@@ -119,12 +122,31 @@ namespace narodlman
             return urlNextPage;
         }
 
-        public async Task<IReadOnlyCollection<Episode>> GetEpisodesAsync(IEnumerable<EpisodeInfo> epInfos, CancellationToken ct)
+        private static int GetFirstEpisodeNumber(IHtmlDocument doc)
+        {
+            var elemPagerRes = doc.QuerySelector("div.c-pager__result-stats");
+            // 1ページに全エピソードが入る場合ページャーは存在しない
+            // その場合は開始エピソード番号は1となる
+            if (elemPagerRes == null)
+            {
+                return 1;
+            }
+            var regexpFirstPage = RegexFirstPage();
+            var matchFirstPage = regexpFirstPage.Match(elemPagerRes.TextContent);
+            if (!matchFirstPage.Success)
+            {
+                throw new Error($"Invalid Pager Result");
+            }
+            var epNumFirst = int.Parse(matchFirstPage.Value);
+            return epNumFirst;
+        }
+
+        public async Task<IReadOnlyCollection<Episode>> GetEpisodesAsync(IEnumerable<EpisodeInfo> epInfos, Action callback, CancellationToken ct)
         {
             using var sem = new SemaphoreSlim(0);
             void OnNavigationCompl(object? sender, CoreWebView2NavigationCompletedEventArgs e)
             {
-                Debug.WriteLine("Navigation Completed.");
+                Debug.WriteLine($"Navigation Completed. {_webView2.CoreWebView2.Source}");
                 sem.Release();
             };
             _webView2.NavigationCompleted += OnNavigationCompl;
@@ -148,6 +170,7 @@ namespace narodlman
                         var episode = ParseEpisode(doc, epInfo);
                         listEpisode.Add(episode);
                     }, ct);
+                    callback();
                 }
             }
             finally
@@ -176,6 +199,45 @@ namespace narodlman
             }
             var episode = new Episode(epInfo.EpisodeNumber, epInfo.Title, epInfo.LastModifiedTime, listPara.AsReadOnly());
             return episode;
+        }
+
+        public async Task<TitleAuthor> GetTitleAuthorAsync(CancellationToken ct)
+        {
+            using var sem = new SemaphoreSlim(0);
+            void OnNavigationCompl(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+            {
+                Debug.WriteLine("Navigation Completed.");
+                sem.Release();
+            };
+            _webView2.NavigationCompleted += OnNavigationCompl;
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                _webView2.CoreWebView2.Navigate(_utlTitlePage);
+                await sem.WaitAsync(ct);
+                ct.ThrowIfCancellationRequested();
+                var res = await _webView2.ExecuteScriptAsync("document.documentElement.outerHTML;");
+                ct.ThrowIfCancellationRequested();
+                var titleAuthor = await Task.Run<TitleAuthor>(() =>
+                {
+                    var strHtml = System.Text.Json.JsonDocument.Parse(res).RootElement.GetString() ?? throw new Error($"JavaScrip Execution Error");
+                    var doc = _htmlParser.ParseDocument(strHtml);
+                    var titleAuthor = ParseTitleAuthor(doc);
+                    return titleAuthor;
+                }, ct);
+                return titleAuthor;
+            }
+            finally
+            {
+                _webView2.NavigationCompleted -= OnNavigationCompl;
+            }
+        }
+
+        private static TitleAuthor ParseTitleAuthor(IHtmlDocument doc)
+        {
+            var strTitle = doc.QuerySelector("h1.p-novel__title")?.TextContent ?? throw new Exception("No Title");
+            var strAuthor = doc.QuerySelector("div.p-novel__author > a")?.TextContent ?? throw new Exception("No Author");
+            return new TitleAuthor(strTitle, strAuthor);
         }
 
         [GeneratedRegex(@"[0-9\/: ]+")]

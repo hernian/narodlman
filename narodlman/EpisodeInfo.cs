@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace narodlman
 {
-    internal class EpisodeInfo
+    public class EpisodeInfo
     {
         public int EpisodeNumber { get; set; }
         public string Title { get; set; } = string.Empty;

@@ -34,5 +34,18 @@ namespace narodlman.Properties {
                 this["PathBookInfo"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("D:\\MyPrograms\\narozip2epub\\narozip2epub\\bin\\Debug\\net8.0-windows\\narozip2epub.exe" +
+            "")]
+        public string PathNaroZip2EPub {
+            get {
+                return ((string)(this["PathNaroZip2EPub"]));
+            }
+            set {
+                this["PathNaroZip2EPub"] = value;
+            }
+        }
     }
 }

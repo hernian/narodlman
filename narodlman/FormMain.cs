@@ -1,5 +1,6 @@
 using Microsoft.Web.WebView2.Core;
 using System.Diagnostics;
+using System.Text;
 
 namespace narodlman
 {
@@ -28,20 +29,17 @@ namespace narodlman
             buttonDownload.Enabled = true;
         }
 
-        private void CreateNewToolStripMenuItem_Click(object sender, EventArgs e)
+        private async void CreateNewToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            using var form = new FormCreateBookInfo();
+            using var form = new FormCreateBookInfo(webView21.CoreWebView2.Environment);
             if (form.ShowDialog(this) == DialogResult.OK)
             {
-                var pathBookInfo = form.PathBookInfo;
-                var dirZip = Path.GetDirectoryName(pathBookInfo) ?? string.Empty;
-                var fileName = Path.GetFileNameWithoutExtension(pathBookInfo);
-                var pathZip = Path.Combine(dirZip, $"{fileName}.zip");
-                var bookInfoMan = BookInfoMan.Create(pathBookInfo, form.UrlTitlePage, pathZip);
-                bookInfoMan.Save();
-                SetBookInfoMan(bookInfoMan);
-
+                var bim = form.GetBookInfoMan();
+                bim.Save();
+                SetBookInfoMan(bim);
             }
+            await form.Wait();
+            Debug.WriteLine("Wait Compl. FormCreateBookInfo");
         }
 
         private void LoadToolStripMenuItem_Click(object sender, EventArgs e)
@@ -104,15 +102,34 @@ namespace narodlman
             {
                 buttonDownload.Enabled = false;
                 buttonCancel.Enabled = true;
+                webView21.Enabled = false;
+                webView21.ZoomFactor = 0.3;
+                progressBar.Style = ProgressBarStyle.Marquee;
                 var nn = new NaroNavigator(webView21, textBoxUrlTitlePage.Text);
                 using var cts = new CancellationTokenSource();
                 var ct = cts.Token;
-                var updater = await BookUpdater.CreateAsync(_bookInfoMan.PathZipFile, ct);
+                using var logger = new Logger(_bookInfoMan.PathLogFile);
+                var updater = await BookUpdater.CreateAsync(_bookInfoMan.PathZipFile, logger, ct);
                 var epNumStart = updater.GetEpisodeNumberForCheck();
                 var epInfosNow = await nn.GetEpisodeInfoListAsync(epNumStart, ct);
                 var epInfosDL = await updater.GetEpsodeInfosForUpdateAsync(epInfosNow, ct);
-                var episodesNew = await nn.GetEpisodesAsync(epInfosDL, ct);
+                progressBar.Style = ProgressBarStyle.Blocks;
+                progressBar.Maximum = epInfosDL.Count;
+                progressBar.Value = 0;
+                void CallbackEpisode()
+                {
+                    this.Invoke(() =>
+                    {
+                        progressBar.Value += 1;
+                    });
+                }
+                var episodesNew = await nn.GetEpisodesAsync(epInfosDL, CallbackEpisode, ct);
                 await updater.MergeSaveAsync(episodesNew, ct);
+                var strHtml = await GetNewEpisodesMessage(episodesNew);
+                await updater.OutputGenEPubBatAsync(_bookInfoMan.BookInfo, ct);
+                webView21.NavigateToString(strHtml);
+                webView21.ZoomFactor = 1.0;
+                webView21.Enabled = true;
             }
             catch (Exception ex)
             {
@@ -120,8 +137,92 @@ namespace narodlman
             }
             finally
             {
+                progressBar.Style = ProgressBarStyle.Blocks;
+                progressBar.Maximum = 100;
+                progressBar.Value = 0;
                 buttonCancel.Enabled = false;
                 buttonDownload.Enabled = true;
+            }
+        }
+
+        private static Task<string> GetNewEpisodesMessage(IEnumerable<Episode> episodesNew)
+        {
+            return Task.Run<string>(() =>
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("<html>");
+                sb.AppendLine("<head>");
+                sb.AppendLine("<title>結果</title>");
+                sb.AppendLine("<style>table, table th, table td { border: 1px solid black; }</style>");
+                sb.AppendLine("</head>");
+                sb.AppendLine("<body>");
+                if (episodesNew.Any())
+                {
+                    sb.AppendLine("<p>更新されたエピソード</p>");
+                    sb.AppendLine("<table>");
+                    sb.AppendLine("<tr><th>#</th><th>タイトル</th><th>更新日時</th></tr>");
+                    foreach (var epNew in episodesNew)
+                    {
+                        sb.Append("<tr>");
+                        sb.Append($"<td>{epNew.EpisodeNumber}</td>");
+                        sb.Append($"<td>{epNew.Title}</td>");
+                        sb.Append($"<td>{DateTimeUtil.GetDateTimeString(epNew.LastModifiedTime.LocalDateTime)}</td>");
+                        sb.AppendLine("</tr>");
+                    }
+                    sb.AppendLine("</table>");
+                }
+                else
+                {
+                    sb.AppendLine("<p>更新されたエピソードはありません</p>");
+                }
+                sb.AppendLine("</body></html>");
+                return sb.ToString();
+            });
+        }
+
+        private void FormMain_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data == null)
+            {
+                return;
+            }
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var fileNames = (string[]?)e.Data.GetData(DataFormats.FileDrop, false);
+                if (fileNames != null && fileNames.Length == 1)
+                {
+                    var pathBookInfo = fileNames[0];
+                    var ext = Path.GetExtension(pathBookInfo).ToLower();
+                    if (ext == ".bookinfo")
+                    {
+                        e.Effect = DragDropEffects.Copy;
+                        return;
+                    }
+                }
+            }
+            e.Effect = DragDropEffects.None;
+        }
+
+        private void FormMain_DragDrop(object sender, DragEventArgs e)
+        {
+            if (e.Data == null)
+            {
+                return;
+            }
+            var fileNames = (string[]?)e.Data.GetData(DataFormats.FileDrop, false);
+            if (fileNames == null || fileNames.Length < 1)
+            {
+                return;
+            }
+            try
+            {
+                var pathBookInfo = fileNames[0];
+                var bookInfoMah = BookInfoMan.Load(pathBookInfo);
+                SetBookInfoMan(bookInfoMah);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
             }
         }
     }

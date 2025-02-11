@@ -6,9 +6,12 @@ using System.Threading.Tasks;
 
 namespace narodlman
 {
-    internal class BookInfo
+    public class BookInfo
     {
         public string UrlTitlePage { get; set; } = string.Empty;
-        public string PathZip { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string KanaTitle {  get; set; } = string.Empty;
+        public string Author { get; set; } = string.Empty;
+        public string KanaAuthor {  get; set; } = string.Empty;
     }
 }

@@ -43,13 +43,15 @@
             openFileDialogBookInfo = new OpenFileDialog();
             label3 = new Label();
             textBoxPathBookInfo = new TextBox();
+            textBox1 = new TextBox();
+            progressBar = new ProgressBar();
             menuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)webView21).BeginInit();
             SuspendLayout();
             // 
             // button1
             // 
-            button1.Location = new Point(699, 452);
+            button1.Location = new Point(698, 489);
             button1.Name = "button1";
             button1.Size = new Size(75, 23);
             button1.TabIndex = 0;
@@ -125,14 +127,14 @@
             webView21.Enabled = false;
             webView21.Location = new Point(12, 109);
             webView21.Name = "webView21";
-            webView21.Size = new Size(762, 294);
+            webView21.Size = new Size(340, 294);
             webView21.TabIndex = 6;
             webView21.ZoomFactor = 1D;
             // 
             // buttonDownload
             // 
             buttonDownload.Enabled = false;
-            buttonDownload.Location = new Point(527, 409);
+            buttonDownload.Location = new Point(617, 425);
             buttonDownload.Name = "buttonDownload";
             buttonDownload.Size = new Size(75, 23);
             buttonDownload.TabIndex = 7;
@@ -142,7 +144,7 @@
             // 
             // buttonCancel
             // 
-            buttonCancel.Location = new Point(631, 409);
+            buttonCancel.Location = new Point(698, 425);
             buttonCancel.Name = "buttonCancel";
             buttonCancel.Size = new Size(75, 23);
             buttonCancel.TabIndex = 8;
@@ -173,12 +175,32 @@
             textBoxPathBookInfo.Size = new Size(654, 23);
             textBoxPathBookInfo.TabIndex = 10;
             // 
+            // textBox1
+            // 
+            textBox1.Location = new Point(358, 109);
+            textBox1.Multiline = true;
+            textBox1.Name = "textBox1";
+            textBox1.ReadOnly = true;
+            textBox1.ScrollBars = ScrollBars.Both;
+            textBox1.Size = new Size(416, 294);
+            textBox1.TabIndex = 11;
+            // 
+            // progressBar
+            // 
+            progressBar.Location = new Point(12, 409);
+            progressBar.Name = "progressBar";
+            progressBar.Size = new Size(761, 10);
+            progressBar.TabIndex = 12;
+            // 
             // FormMain
             // 
+            AllowDrop = true;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = SystemColors.Control;
-            ClientSize = new Size(800, 487);
+            ClientSize = new Size(800, 583);
+            Controls.Add(progressBar);
+            Controls.Add(textBox1);
             Controls.Add(textBoxPathBookInfo);
             Controls.Add(label3);
             Controls.Add(buttonCancel);
@@ -192,6 +214,8 @@
             Name = "FormMain";
             Text = "Form1";
             Load += FormMain_Load;
+            DragDrop += FormMain_DragDrop;
+            DragEnter += FormMain_DragEnter;
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)webView21).EndInit();
@@ -216,5 +240,7 @@
         private OpenFileDialog openFileDialogBookInfo;
         private Label label3;
         private TextBox textBoxPathBookInfo;
+        private TextBox textBox1;
+        private ProgressBar progressBar;
     }
 }
